@@ -140,7 +140,7 @@ export function buildSettingsSection(ns: string): LlamaSettingsSection {
         path: ['autoStart'],
         label: 'Auto start',
         descriptions: { zh: '启动时拉起' },
-        hint: '打开 dsh 就启动 llama.cpp；关闭则等第一个请求',
+        hint: '在 dsh 内核且选中本地模型时自动拉起；关闭则等第一个请求',
         group: 'general',
         kind: 'boolean',
       },
@@ -393,7 +393,8 @@ export function describeStatus(s: ServerStatus, cfg: LlamaConfig): string {
  * 刻意排除：
  *   temperature / disableThinking —— adapter 每请求写进 body，立即生效
  *   idleStopMs —— 只重置空闲计时器
- *   displayName / debug / autoStart / initialModel —— 不影响已运行进程
+ *   displayName / debug / autoStart / initialModel —— 不影响已运行进程；
+ *     后两者是启动门禁的输入，由 index.ts 的 reconcile() 另行收敛
  */
 const RESTART_KEYS: readonly (keyof LlamaConfig)[] = [
   'executable',

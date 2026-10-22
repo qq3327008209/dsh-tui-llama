@@ -4,12 +4,16 @@ dsh-tui 的本地推理插件：在终端里 `/model` 选一个本地 GGUF 模�
 `llama-server.exe`；退出 dsh 服务跟着关停；所有参数都能在 `/settings` 里改，改完
 就地热生效或自动重启进程——全程不用碰 shell。
 
+服务只在**用 dsh 内核、且当前选中的模型是本地模型**时才被拉起；两个条件任一失效
+就停掉。在 claude / codex 内核下不会占着显存空跑。
+
 | 标识 | 值 |
 |---|---|
 | cordis entry id / settings 命名空间 | `dsh-tui-local-llama` |
 | LLM provider id | `llama-local` |
 | 状态栏 key | `local-llama` |
 | 快捷键 | `alt+l` 启停服务 |
+| 启动门禁 | `kernel.json` 的 `backend` + `model.json` 的 `provider`，见下节 |
 | PID 文件 | `~/.dsh-tui/local-llama/pid.json` |
 | 诊断日志 | `~/.dsh-tui/local-llama-diag.log`（可用 `LOCAL_LLAMA_LOG` 覆盖） |
 
@@ -38,12 +42,12 @@ dsh-tui 的本地推理插件：在终端里 `/model` 选一个本地 GGUF 模�
 
 ### 方式 A：装打包好的 tarball（推荐给使用者）
 
-`npm pack` 产出 `dsh-tui-local-llama-0.1.0.tgz`，里面已经带好编译好的 `dist/`、
+`npm pack` 产出 `dsh-tui-local-llama-0.2.0.tgz`，里面已经带好编译好的 `dist/`、
 `vendor/`、`cordis.patch.yml`、`README`、`LICENSE`，拿到就能用，不需要 Node 构建环境：
 
 ```bash
 cd ~/.dsh/profiles/dsh-tui
-pnpm add ./dsh-tui-local-llama-0.1.0.tgz
+pnpm add ./dsh-tui-local-llama-0.2.0.tgz
 ```
 
 ### 方式 B：直接指向源码目录（开发时用）
@@ -66,7 +70,7 @@ DSH_HOST_MODULES="$HOME/dsh/node_modules/@deepseek-ai/dsh/node_modules/@deepseek
   npm run link:host
 
 npm run build          # = tsc
-ls dist/               # 核对 10 个产物齐全——别只看 tsc 的 exit code
+ls dist/               # 核对 11 个产物齐全——别只看 tsc 的 exit code
 npm pack               # 产出 tarball，再走方式 A 安装
 ```
 
@@ -99,6 +103,16 @@ export LOCAL_LLAMA_MODELS_DIR="$HOME/llama/models:$HOME/models"
 这份故意留空（见文件内注释），就是为了不写死任何机器路径。用户在 `/settings` 保存的值
 走 profile 级 overlay，插件出厂配置不受影响。
 
+### 环境变量
+
+| 变量 | 作用 |
+|---|---|
+| `LOCAL_LLAMA_EXE_DIR` | 额外的可执行文件搜索目录，逗号分隔，逐个展开 `~` |
+| `LOCAL_LLAMA_MODELS_DIR` | 额外的模型搜索目录，逗号分隔 |
+| `LOCAL_LLAMA_LOG` | 诊断日志路径，默认 `~/.dsh-tui/local-llama-diag.log` |
+| `LOCAL_LLAMA_DATA_DIR` | 覆盖 `~/.dsh-tui`，测试门禁时用 |
+| `LOCAL_LLAMA_PID_FILE` | 覆盖 pid 文件路径，测试用 —— 门禁判成「不该跑」时会按 pid 记录杀进程 |
+
 
 ## 使用
 
@@ -107,6 +121,42 @@ export LOCAL_LLAMA_MODELS_DIR="$HOME/llama/models:$HOME/models"
 - `alt+l` —— 切换服务启停。状态栏显示 `llama 运行中 · <模型> · 127.0.0.1:8642`。
 - 退出 dsh —— 撤 UI 贡献 → 撤事件监听 → 拆模型目录 → 优雅停 llama-server。
   下次启动时会读 `pid.json`，收养或杀掉上次残留的孤儿进程。
+
+---
+
+## 启动门禁：什么情况下会拉起 llama-server
+
+服务的启动时机**不是**「打开 dsh 就拉」，而是两个条件同时成立：
+
+1. **当前 dsh-tui 跑的是 dsh 内核** —— 读 `~/.dsh-tui/kernel.json` 的 `backend` 字段，
+   必须是 `dsh`（不是 `claude` / `codex`）。
+2. **当前选中的模型是本地模型** —— 读 `~/.dsh-tui/model.json` 的 `provider` 字段，
+   必须是 `llama-local`。
+
+两个文件都是 dsh-tui 自己写的，本插件只读。任一条件不成立就不拉起；条件由成立
+变成不成立时会主动停掉已在跑的服务。
+
+为什么两个都要查：`model.json` 只有 dsh 内核的 `/model` 切换会写（宿主里
+`writeModelPref` 只出现在 `dsh-adapter/channel/model-switch.js`），claude / codex
+内核各自维护 `backends/<id>/prefs.json`，从不碰它。所以切到 claude 之后
+`model.json` 还留着上次 dsh 会话的 `llama-local` —— 只看 `model.json` 会把一个
+根本没在跑 dsh agent 的会话误判成该拉起服务。
+
+内核解析顺序与宿主一致：`DSH_TUI_BACKEND_HANDOFF` → `DSH_TUI_BACKEND` →
+`kernel.json` → 默认 `dsh`。宿主写在 profile Config 行里的 `backend:` 排在这三者
+之前，但要解 YAML 才能读，插件不读它 —— profile 里若真钉了 `backend:`，看诊断日志
+的 `backend=` 值核对。
+
+负向变更（该跑 → 不该跑）会**连读两次确认**才停：宿主写 `model.json` 用的是非原子
+`writeFileSync`，轮询恰好落在半写入窗口里会把 JSON 读成解析失败、读成「没选模型」，
+直接停会白停一次再拉起来。正向变更（不该跑 → 该跑）立即生效。
+
+两点边界：
+
+- `model.json` **不存在**（从未用过 `/model`）时判为「不该跑」，不会自动拉起。
+  但服务仍会在**第一个本地模型的请求到来时**按需启动 —— adapter 每次请求都会
+  `ensure()`，这条兜底与门禁无关。
+- `alt+l` 是手动开关，门禁不干预它；但之后若内核或模型发生切换，门禁仍会重新收敛。
 
 ---
 
@@ -122,7 +172,7 @@ export LOCAL_LLAMA_MODELS_DIR="$HOME/llama/models:$HOME/models"
 | `executable` | `""` | llama-server 路径。空 = 自动发现 |
 | `modelsDir` | `""` | GGUF 目录。空 = 自动发现 |
 | `strategy` | `single` | `single` 一次一个模型进程；`router` 常驻 `--models-dir` + `/models/load` 热切 |
-| `autoStart` | `true` | 应用启动即拉起服务（否则等第一个请求） |
+| `autoStart` | `true` | 门禁通过时自动拉起服务，否则等第一个请求。门禁见「启动门禁」节 |
 | `initialModel` | `""` | `autoStart` 时优先加载的模型；空 = 目录里排序最前的一份 |
 | `noUi` | `true` | llama-server 的 `--no-ui`（`--no-webui` 已弃用） |
 | `debug` | `false` | 打开诊断探针输出 |
@@ -170,6 +220,34 @@ export LOCAL_LLAMA_MODELS_DIR="$HOME/llama/models:$HOME/models"
 ---
 
 
+
+## 验证
+
+```bash
+npm run build
+npm test          # = route-gate + fallback-spawn + smoke，三条串行
+```
+
+三条各验一件事：
+
+- `test/route-gate.mjs` —— 启动门禁。临时目录里造 `kernel.json` / `model.json`，
+  验解析优先级、半写入 JSON、正负向变更通知。不启动 llama-server，秒级跑完。
+- `test/fallback-spawn.mjs` —— 本地 `child_process` 回退实现。真 spawn 一次
+  llama-server，等 `/v1/health` 就绪再确认模型真的加载了。
+- `test/smoke.mjs` —— 端到端。假 seam 直接调 `apply()`，走
+  `listProviders → listModels → prepareCall → stream` 一整条 dsh 内部路径，
+  最后确认 disposer 把进程真停干净、且 boot 门禁判定确实执行过。
+
+两条需要 llama-server 的测试用默认端口 `8651` / `8642`，被占了就换：
+
+```bash
+LOCAL_LLAMA_EXE_DIR="$HOME/llama" LOCAL_LLAMA_MODELS_DIR="$HOME/llama/models" \
+  LLAMA_PORT=8652 node test/smoke.mjs
+```
+
+测试进程会把门禁数据和 pid 记录隔离到临时目录（`LOCAL_LLAMA_DATA_DIR` /
+`LOCAL_LLAMA_PID_FILE`），不会读到 `~/.dsh-tui` 里的真文件，也不会杀掉你手动起的
+llama-server。
 
 ## 许可证
 

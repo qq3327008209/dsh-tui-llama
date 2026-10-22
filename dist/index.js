@@ -3,6 +3,7 @@ import { LlamaLocalAdapter } from './adapter.js';
 import { adopt, Config, DISCOVERY_TIMEOUT_MS, ENTRY_ID, PROVIDER_ID, SETTINGS_NS, STATUS_KEY, } from './config.js';
 import { bestExecutable, bestModelsDir, discoverEnvironmentSafe } from './discover.js';
 import { LlamaServerManager, localSubprocess } from './llama-server.js';
+import { DSH_BACKEND_ID, formatRoute, RouteGate } from './route-gate.js';
 import { ModelStore } from './model-store.js';
 import { buildSettingsSection, describeStatus, needsRestart } from './ui.js';
 /* ---------------- 导出面 ---------------- */
@@ -161,6 +162,38 @@ export function apply(ctx, entry) {
         },
         logger,
     }, () => cfg.current, (id) => store.get(id), () => store.models());
+    /* ---- 2b. 启动门禁 ----
+       llama-server 只在「dsh 内核 + 选中的模型是本地 provider」同时成立时拉起；
+       两个信号都成立时自动拉起，任一失效就停掉。谓词与 index 之外的读法
+       （route-gate.ts 头部的注释）保持一处定义，避免两处漂移。 */
+    const routeGate = new RouteGate({
+        isWanted: (snap) => snap.backend === DSH_BACKEND_ID && snap.route?.provider === PROVIDER_ID,
+    });
+    diagLog('gate-init', `backend=${routeGate.get().backend} route=${formatRoute(routeGate.get().route)} wanted=${routeGate.isWanted()}`);
+    /** 按门禁判定收敛到正确状态。正向上 ensure（缺模型名时回落 initialModel），负向上清孤儿。 */
+    const reconcile = (reason) => {
+        const snap = routeGate.get();
+        const wanted = cfg.current.autoStart && routeGate.isWanted();
+        diagLog('gate', `${reason}: backend=${snap.backend} route=${formatRoute(snap.route)} autoStart=${cfg.current.autoStart} wanted=${wanted}`);
+        if (wanted) {
+            void manager
+                .ensure(snap.route?.model || cfg.current.initialModel || undefined)
+                .catch((err) => warn(`自动启动失败：${describeError(err)}`));
+            return;
+        }
+        // 负向：先停掉自己拉起的进程，再清上次会话残留的孤儿（只按 pid 记录杀，
+        // 端口被无关进程占了不碰）。
+        void manager
+            .stop()
+            .catch(() => undefined)
+            .then(() => manager.reapStale())
+            .catch(() => undefined);
+    };
+    const offRouteGate = routeGate.watch(() => {
+        reconcile('route-changed');
+        publishStatus();
+    });
+    teardown.push(() => offRouteGate());
     /** 第一个入列 → 逆序时最后执行：先撤掉所有订阅，再停服务。 */
     teardown.push(() => {
         void manager
@@ -207,12 +240,15 @@ export function apply(ctx, entry) {
                 .stop()
                 .catch(() => undefined)
                 .then(() => {
-                // 改完参数就按当前配置立刻拉起，不用等下一个请求。
-                if (next.autoStart)
-                    return manager.ensure(next.initialModel || undefined);
-                return Promise.resolve();
+                // 改完参数立刻按门禁收敛，不用等下一个请求。
+                reconcile('settings');
             })
                 .catch((err) => warn(`重启失败：${describeError(err)}`));
+        }
+        else if (prev.autoStart !== next.autoStart || prev.initialModel !== next.initialModel) {
+            // 门禁的输入变了：不改启动参数，但要重新判定该不该在跑。
+            reconcile('settings');
+            publishStatus();
         }
         else {
             publishStatus();
@@ -377,11 +413,7 @@ export function apply(ctx, entry) {
         .then(() => {
         diagLog('store-refresh2', `dir=${store.directory} models=${store.models().map((m) => m.id).join(',') || '<none>'}`);
         publishStatus();
-        if (!cfg.current.autoStart)
-            return;
-        return manager
-            .ensure(cfg.current.initialModel || undefined)
-            .catch((err) => warn(`自动启动失败：${describeError(err)}`));
+        reconcile('boot');
     })
         .catch((err) => warn(`环境准备失败：${describeError(err)}`));
     return () => {

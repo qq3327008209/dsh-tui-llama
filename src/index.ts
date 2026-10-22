@@ -1,7 +1,7 @@
 /**
  * dsh-tui-local-llama —— llama.cpp 本地推理适配插件（cordis 插件入口）。
  *
- * 三条契约要点：
+ * 四条契约要点：
  *
  * 1. Plugin.Object 形态必须是 named export `name` / `Config` / `apply`。
  *    **绝不能加 default export** —— 加载器的 unwrapExports 一旦发现 `default`
@@ -14,6 +14,10 @@
  *
  * 3. `apply()` 返回单个 disposer（Effect 契约：fiber 卸载时逆序执行）。
  *    关停顺序：撤 UI 贡献 → 撤监听 → 拆模型目录 → 优雅停 llama.cpp。
+ *
+ * 4. 启动时机不由 profile 激活决定，由门禁决定：只有「dsh 内核 且 /model 选中的
+ *    是本地 provider」同时成立时才拉起 llama-server，任一门禁失效就停掉。
+ *    谓词与两个信号的读法集中在 ./route-gate.ts，本文件只有 reconcile() 一个消费点。
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { LlmRuntime } from '@deepseek-ai/dsh-llm';
@@ -40,6 +44,7 @@ import {
 } from './config.js';
 import { bestExecutable, bestModelsDir, discoverEnvironmentSafe } from './discover.js';
 import { LlamaServerManager, localSubprocess, type SubprocessRuntime } from './llama-server.js';
+import { DSH_BACKEND_ID, formatRoute, RouteGate } from './route-gate.js';
 import { ModelStore } from './model-store.js';
 import { buildSettingsSection, describeStatus, needsRestart, type LlamaSettingsSection } from './ui.js';
 
@@ -67,12 +72,6 @@ function safeJson(v: unknown): string {
   }
 }
 diagLog('module-load', `name=${name} apply=${typeof apply} default=<none by design> node=${process.version}`);
-
-/* 刻意不导出 Config。
- * cordis 的 resolveConfig 对缺失 Config 是放行的（`if (!runtime.Config) return config`），
- * entry config 原样交给 apply()，`adopt()` 自己做数字夹取/枚举归一/空串回落。
- * 不导出还能顺带去掉对 @deepseek-ai/schemastery 的运行期依赖 —— 见 ./shims.ts 的说明。
- */
 
 /* ---------------- 宿主 seam 的最小结构面 ---------------- */
 
@@ -246,6 +245,40 @@ export function apply(ctx: Context, entry: Partial<LlamaConfig>): () => void {
     () => store.models(),
   );
 
+  /* ---- 2b. 启动门禁 ----
+     llama-server 只在「dsh 内核 + 选中的模型是本地 provider」同时成立时拉起；
+     两个信号都成立时自动拉起，任一失效就停掉。谓词与 index 之外的读法
+     （route-gate.ts 头部的注释）保持一处定义，避免两处漂移。 */
+  const routeGate = new RouteGate({
+    isWanted: (snap) => snap.backend === DSH_BACKEND_ID && snap.route?.provider === PROVIDER_ID,
+  });
+  diagLog('gate-init', `backend=${routeGate.get().backend} route=${formatRoute(routeGate.get().route)} wanted=${routeGate.isWanted()}`);
+
+  /** 按门禁判定收敛到正确状态。正向上 ensure（缺模型名时回落 initialModel），负向上清孤儿。 */
+  const reconcile = (reason: string): void => {
+    const snap = routeGate.get();
+    const wanted = cfg.current.autoStart && routeGate.isWanted();
+    diagLog('gate', `${reason}: backend=${snap.backend} route=${formatRoute(snap.route)} autoStart=${cfg.current.autoStart} wanted=${wanted}`);
+    if (wanted) {
+      void manager
+        .ensure(snap.route?.model || cfg.current.initialModel || undefined)
+        .catch((err: unknown) => warn(`自动启动失败：${describeError(err)}`));
+      return;
+    }
+    // 负向：先停掉自己拉起的进程，再清上次会话残留的孤儿（只按 pid 记录杀，
+    // 端口被无关进程占了不碰）。
+    void manager
+      .stop()
+      .catch(() => undefined)
+      .then(() => manager.reapStale())
+      .catch(() => undefined);
+  };
+
+  const offRouteGate = routeGate.watch(() => {
+    reconcile('route-changed');
+    publishStatus();
+  });
+  teardown.push(() => offRouteGate());
   /** 第一个入列 → 逆序时最后执行：先撤掉所有订阅，再停服务。 */
   teardown.push(() => {
     void manager
@@ -291,11 +324,14 @@ export function apply(ctx: Context, entry: Partial<LlamaConfig>): () => void {
         .stop()
         .catch(() => undefined)
         .then(() => {
-          // 改完参数就按当前配置立刻拉起，不用等下一个请求。
-          if (next.autoStart) return manager.ensure(next.initialModel || undefined);
-          return Promise.resolve();
+          // 改完参数立刻按门禁收敛，不用等下一个请求。
+          reconcile('settings');
         })
         .catch((err: unknown) => warn(`重启失败：${describeError(err)}`));
+    } else if (prev.autoStart !== next.autoStart || prev.initialModel !== next.initialModel) {
+      // 门禁的输入变了：不改启动参数，但要重新判定该不该在跑。
+      reconcile('settings');
+      publishStatus();
     } else {
       publishStatus();
     }
@@ -454,10 +490,7 @@ export function apply(ctx: Context, entry: Partial<LlamaConfig>): () => void {
     .then(() => {
       diagLog('store-refresh2', `dir=${store.directory} models=${store.models().map((m) => m.id).join(',') || '<none>'}`);
       publishStatus();
-      if (!cfg.current.autoStart) return;
-      return manager
-        .ensure(cfg.current.initialModel || undefined)
-        .catch((err: unknown) => warn(`自动启动失败：${describeError(err)}`));
+      reconcile('boot');
     })
     .catch((err: unknown) => warn(`环境准备失败：${describeError(err)}`));
 

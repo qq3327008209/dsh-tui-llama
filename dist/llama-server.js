@@ -260,6 +260,27 @@ export class LlamaServerManager {
         return this.run(() => this.stopInner());
     }
     /**
+     * 只清孤儿，不启动：门禁判成「不该跑」时，上次会话残留、还占着端口的
+     * 进程直接杀掉。不像 `startup()` 那样尝试采纳 —— 采纳等于「留着它」，
+     * 正好与负向判定相反。已持有自己的进程时不动它（那走 stop()）。
+     */
+    reapStale() {
+        return this.run(async () => {
+            if (this.handle || this.terminal || this.status.pid !== undefined)
+                return;
+            const cfg = this.cfg();
+            if (!LlamaServerManager.probePort(cfg.host, cfg.port))
+                return;
+            const stale = this.readPidFile();
+            if (!stale)
+                return;
+            this.pushLines([`[manager] 门禁判定不该运行，终止残留进程 pid ${stale.pid}`]);
+            this.killProcess(stale.pid);
+            this.unlinkPidFile();
+            await new Promise((r) => setTimeout(r, 300));
+        });
+    }
+    /**
      * 请求到达 OpenAI 端口前保证「目标模型已就绪」。
      * 未运行 → 启动；运行但模型不匹配 → 先停后启（都在真正发请求之前完成）。
      */
@@ -817,7 +838,9 @@ export class LlamaServerManager {
     }
     /* ---------- PID 文件（第三层关停保险） ---------- */
     pidFilePath() {
-        return join(homedir(), PID_REL);
+        // LOCAL_LLAMA_PID_FILE 让测试进程不会读到真实 pid 记录 —— 门禁判成
+        // 「不该跑」时会照 pid 记录杀进程，测试不能碰用户的真进程。
+        return process.env.LOCAL_LLAMA_PID_FILE ?? join(homedir(), PID_REL);
     }
     writePidFile(pid, host, port, modelId) {
         const path = this.pidFilePath();

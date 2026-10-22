@@ -72,7 +72,10 @@ export interface LlamaConfig {
   seed: number;
   /** Qwen3 系列默认开 thinking，会吞光输出并让 content 永远为空。true = 每次请求关。 */
   disableThinking: boolean;
-  /** 应用启动时就拉起服务（否则等第一个请求到来）。 */
+  /**
+   * 门禁通过时就拉起服务，否则等第一个请求到来。
+   * 门禁 = dsh 内核 且 /model 选中的是本地 provider，见 ./route-gate.ts。
+   */
   autoStart: boolean;
   /** autoStart 时优先加载的模型；空串 = 目录里排序最前的一份。 */
   initialModel: string;

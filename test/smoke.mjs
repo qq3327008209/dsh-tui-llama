@@ -13,10 +13,20 @@
  *   4. disposer 调用后进程真的退出
  */
 import { spawn } from 'node:child_process';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// 隔离到临时目录：门禁读不到真实的 kernel.json / model.json，pid 记录也指不到
+// 用户真在跑的进程（门禁判成「不该跑」时会按 pid 记录杀进程）。
+const sandbox = mkdtempSync(join(tmpdir(), 'local-llama-smoke-'));
+process.env.LOCAL_LLAMA_DATA_DIR = sandbox;
+process.env.LOCAL_LLAMA_PID_FILE = join(sandbox, 'pid.json');
+process.env.LOCAL_LLAMA_LOG = join(sandbox, 'diag.log');
+
 const mod = await import(pathToFileURL(resolve(ROOT, 'dist/index.js')).href);
 
 /* ---------------- 假 subprocess seam（对齐 llama-server.ts 的结构面） ---------------- */
@@ -174,10 +184,10 @@ const entryConfig = {
   executable: process.env.LLAMA_EXE ?? '',
   modelsDir: process.env.LLAMA_MODELS ?? '',
   host: '127.0.0.1',
-  port: 8642,
+  port: Number(process.env.LLAMA_PORT ?? 8642),
   ctxSize: 8192,
   gpuLayers: 999,
-  autoStart: false, // 我们手动触发，先看 listModels
+  autoStart: false, // 沙箱里没有 kernel.json / model.json，门禁判负；这里手动走 prepareCall
   debug: true,
   startTimeoutMs: 90_000, // 就绪通常 2-4s，给足余量
 };
@@ -194,8 +204,13 @@ function dumpSpawned() {
 }
 const dispose = mod.apply(ctx, entryConfig);
 console.log('name      =', mod.name);
-console.log('Config    =', typeof mod.Config, '(undefined 是对的：不导出，见 index.ts 注释)');
+console.log('Config    =', typeof mod.Config, '(object 是对的：/settings 可编辑的前提)');
 console.log('provider  =', registered?.providers);
+if (!mod.Config) {
+  console.error('FAIL: Config 没导出 —— /settings 里不会有可编辑的本地模型面板');
+  logLines.forEach((l) => console.error('  ', l));
+  process.exit(1);
+}
 console.log('sections  =', sections.map((s) => `${s.ns}  组=${(s.groups ?? []).map((g) => g.id).join(',')}  字段=${s.fields?.length ?? 0}`));
 console.log('shortcuts =', shortcuts.map((s) => s.combo));
 if (!registered) {
@@ -306,6 +321,19 @@ statuses.slice(-5).forEach((s) => console.log(' ', s.text));
 step('7. 日志');
 logLines.slice(-15).forEach((l) => console.log(' ', l));
 
-const ok = models.length > 0 && textOut.trim().length > 0 && after.every((c) => c.exited);
+step('8. 启动门禁是否真的执行过');
+let gateLines = [];
+try {
+  gateLines = readFileSync(process.env.LOCAL_LLAMA_LOG, 'utf8')
+    .split('\n')
+    .filter((l) => / (gate|gate-init|route-gate): /.test(l));
+} catch {
+  /* 探针没写出来 */
+}
+gateLines.slice(-8).forEach((l) => console.log(' ', l));
+const gateRan = gateLines.some((l) => / gate: boot: /.test(l));
+console.log('  有 boot 门禁判定 =', gateRan);
+
+const ok = models.length > 0 && textOut.trim().length > 0 && after.every((c) => c.exited) && gateRan;
 console.log('\n★★★', ok ? 'SMOKE PASS' : 'SMOKE FAIL', '★★★');
 process.exit(ok ? 0 : 1);
