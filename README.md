@@ -50,6 +50,13 @@ cd ~/.dsh/profiles/dsh-tui
 pnpm add ./dsh-tui-local-llama-0.2.0.tgz
 ```
 
+不想自己找 tarball，直接从 git tag 装，效果一样（tarball 也提交进了仓库）：
+
+```bash
+cd ~/.dsh/profiles/dsh-tui
+pnpm add github:qq3327008209/dsh-tui-llama@v0.2.0
+```
+
 ### 方式 B：直接指向源码目录（开发时用）
 
 ```bash
