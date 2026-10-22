@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Local llama.cpp",
+    "description": "Runs a local llama-server for the llama-local provider: auto-starts with dsh or on first request, shuts down on exit, and tunes sampling, context, and GPU settings from the TUI."
+  }
+}

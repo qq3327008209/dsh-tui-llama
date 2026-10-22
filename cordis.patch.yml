@@ -1,0 +1,14 @@
+# dsh-tui-local-llama bundle patch（package.json#dsh.bundle 要求的加载配置）
+# 单包单插件：一个 entry，name = 包名，loader 以该 specifier import() 本包并
+# 调用其导出的 apply(ctx, config)。config 里的值只作 settings 的 base 层默认，
+# 用户在 /settings 保存的值永远优先。
+- insert:
+    - id: dsh-tui-local-llama
+      name: dsh-tui-local-llama
+      config:
+        executable: D:\llama\llama-server.exe
+        modelsDir: D:\llama\models
+        host: 127.0.0.1
+        port: 8642
+        ctxSize: 8192
+        gpuLayers: 999

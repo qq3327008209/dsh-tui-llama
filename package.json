@@ -1,0 +1,47 @@
+{
+  "name": "dsh-tui-local-llama",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dsh-tui 本地 llama.cpp 模型插件：选中即拉起 llama-server，退出即关停，参数在 TUI 内可调",
+  "license": "MIT",
+  "author": "John Smish",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "icon": "./icon.svg",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "imports": {
+    "#schemastery": "./vendor/schemastery.js",
+    "#cosmokit": "./vendor/cosmokit.js"
+  },
+  "files": [
+    "dist/**/*.js",
+    "vendor/*.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "link:host": "node _link.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^5.9.2"
+  }
+}

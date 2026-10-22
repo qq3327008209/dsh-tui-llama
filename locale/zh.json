@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "本地 llama.cpp",
+    "description": "为 llama-local provider 运行本地 llama-server：随 dsh 启动或按需拉起，退出即关停，采样、上下文与 GPU 参数均可在 TUI 内调整。"
+  }
+}
