@@ -111,7 +111,7 @@ export function buildSettingsSection(ns: string): LlamaSettingsSection {
         hint: 'llama-server 路径；留空则自动发现',
         group: 'general',
         kind: 'text',
-        placeholder: 'D:\\llama\\llama-server.exe',
+        placeholder: '~/llama/llama-server.exe',
         parse: str,
       },
       {
@@ -121,7 +121,7 @@ export function buildSettingsSection(ns: string): LlamaSettingsSection {
         hint: 'GGUF 模型所在目录；留空则自动发现',
         group: 'general',
         kind: 'text',
-        placeholder: 'D:\\llama\\models',
+        placeholder: '~/llama/models',
         parse: str,
       },
       {

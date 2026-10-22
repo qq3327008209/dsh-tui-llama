@@ -2,7 +2,7 @@
  * Vendored copy — do not edit independently.
  *
  * Package : @deepseek-ai/cosmokit@1.8.6
- * Upstream: D:/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cosmokit/lib/index.js
+ * Upstream: npm @deepseek-ai/cosmokit@1.8.6, file lib/index.js
  * License : MIT (full text below)
  * Change  : none. Copied verbatim; this module has zero runtime dependencies.
  *

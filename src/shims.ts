@@ -1,16 +1,16 @@
 /**
  * dsh-llm 运行期 API 的最小本地替身。
  *
- * 为什么不用真包：插件装在 profile 的 node_modules 里，宿主不向那里提升
- * `@deepseek-ai/*`，ESM 解析直接 `ERR_MODULE_NOT_FOUND`，整个模块加载失败 →
- * `apply()` 从不执行。表现为「插件装了但 /model 里什么都没有」，而且编译零报错。
+ * 不能 import 真包：插件装在 profile 的 node_modules 里，宿主不向那里提升
+ * `@deepseek-ai/*`，ESM 解析直接 `ERR_MODULE_NOT_FOUND`，整个模块加载失败、
+ * `apply()` 从不执行，而 `import type` 编译期被擦除，所以 tsc 零报错。
  *
  * 这里复刻的三个符号在 dsh-llm 里都很薄：
  *   - `attributionHeaders()`：只造一个 User-Agent 头。
- *   - `LlmError`：`extends HarnessError extends Error`，构造 `(message, code, options?)`。
+ *   - `LlmError`：构造 `(message, code, options?)`。
  *   - `ToolCallId(id)`：branded string 的类型断言，运行时是恒等函数。
  *
- * 类型仍然从 dsh-llm 取（`import type` 编译期擦除，零运行期成本），
+ * 类型仍从 dsh-llm 取（`import type`，编译期擦除，零运行期成本），
  * 这样 StreamChunk / GenerateOptions 的契约不会漂移。
  */
 import type { ToolCallId as ToolCallIdType } from '@deepseek-ai/dsh-llm';

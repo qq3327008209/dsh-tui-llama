@@ -13,16 +13,19 @@ dsh-tui 的本地推理插件：在终端里 `/model` 选一个本地 GGUF 模�
 | PID 文件 | `~/.dsh-tui/local-llama/pid.json` |
 | 诊断日志 | `~/.dsh-tui/local-llama-diag.log`（可用 `LOCAL_LLAMA_LOG` 覆盖） |
 
-完整设计推导（参数分层、Windows 优雅退出序列、风险排除清单）见 [`DESIGN.md`](./DESIGN.md)。
 
 ---
 
 ## 前置条件
 
-1. **llama.cpp server 可执行文件**，例如 `D:\llama\llama-server.exe`。
-   本机实测版本 `0.7.0-dev (build 11784)`，CUDA 13.4。
-2. **至少一个 GGUF 模型**，放在某个目录里，例如 `D:\llama\models\qwen3-5-4B-Q4_K_M.gguf`。
-3. **Node.js ≥ 20**、dsh-tui 已安装（插件挂在 `~/.dsh/profiles/dsh-tui/` 下）。
+1. **llama.cpp server 可执行文件**，例如 `~/llama/llama-server.exe`。
+   从 llama.cpp 的 release zip 解压即可，或 `git clone` 后 `cmake --build` 自己编。
+2. **至少一个 GGUF 模型**，例如 `~/llama/models/qwen3-5-4B-Q4_K_M.gguf`。
+3. **Node.js ≥ 20**，以及一个装过 `@deepseek-harness-tui/dsh-tui` 的 dsh profile
+   （本插件挂在 `~/.dsh/profiles/dsh-tui/` 下）。
+
+路径在本仓库里**全部是相对的**：`~` 表示用户 home（插件运行时会展开），
+文档里的 `~/llama/...` 只是示例布局，你把 llama.cpp 放哪都行。
 
 `executable` / `modelsDir` 都留空时插件会自动扫描常见位置（`DISCOVERY_TIMEOUT_MS` 3s 超时），
 扫不到才报错。但**显式填最稳**，自动发现只是兜底。
@@ -31,20 +34,72 @@ dsh-tui 的本地推理插件：在终端里 `/model` 选一个本地 GGUF 模�
 
 ## 安装
 
+本插件是一个普通的 cordis 插件包，装进你的 dsh-tui profile 即可。三种方式按场合选。
+
+### 方式 A：装打包好的 tarball（推荐给使用者）
+
+`npm pack` 产出 `dsh-tui-local-llama-0.1.0.tgz`，里面已经带好编译好的 `dist/`、
+`vendor/`、`cordis.patch.yml`、`README`、`LICENSE`，拿到就能用，不需要 Node 构建环境：
+
 ```bash
-# 1. 编译
-npx tsc
-ls dist/          # 核对 10 个产物齐全——别只看 tsc 的 exit code
-
-# 2. 装进 profile
 cd ~/.dsh/profiles/dsh-tui
-pnpm add file:"C:/Users/John Smish/Desktop/dsh-tui-llama"
-# 并在 dsh.profile.bundles 里显式列出 dsh-tui-local-llama
-
-# 3. 同步产物（关键，见下）
+pnpm add ./dsh-tui-local-llama-0.1.0.tgz
 ```
 
-### 为什么第 3 步是逐文件拷贝
+### 方式 B：直接指向源码目录（开发时用）
+
+```bash
+cd ~/.dsh/profiles/dsh-tui
+pnpm add file:../dsh-tui-llama          # 换成你 clone / 解压出来的目录
+```
+
+> 注意：这种方式**每次改完源码都要手动同步产物**，见下节「同步产物」。
+> 想一劳永逸就用方式 A。
+
+### 方式 C：从源码构建并打包
+
+```bash
+npm install            # 只装 typescript / @types/node（devDependencies）
+
+# tsc 需要解析宿主自带的 @deepseek-ai/* 类型，先把它们链进本仓库的 node_modules
+DSH_HOST_MODULES="$HOME/dsh/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai" \
+  npm run link:host
+
+npm run build          # = tsc
+ls dist/               # 核对 10 个产物齐全——别只看 tsc 的 exit code
+npm pack               # 产出 tarball，再走方式 A 安装
+```
+
+`DSH_HOST_MODULES` 指向 dsh 自带的 `@deepseek-ai` 包根目录，取决于你把 dsh 装在哪，
+所以它由环境变量传入而不写死在脚本里。`npm run link:host`（`_link.cjs`）**只做
+TypeScript 类型解析用**，运行期完全不需要；产物本身零外部运行期依赖。
+
+装完（A / B / C 都一样）要在 profile 的 `dsh.profile.bundles` 里显式列出
+`dsh-tui-local-llama`，否则宿主不会加载它。
+
+### 配置路径
+
+装好后进 TUI，`/settings` → 「Local llama.cpp」，填两件事就能用：
+
+- **Executable** —— llama-server 路径，例如 `~/llama/llama-server.exe`
+- **Models dir** —— GGUF 模型目录，例如 `~/llama/models`
+
+`~` 会被插件展开成用户 home。
+
+**都留空也行**：插件会扫 `~/llama`、`~/llama.cpp`（含 `build/`、`build/bin/`、
+`build/bin/release/`）、`~/Desktop`，以及 `PATH` 里的每个目录（`DISCOVERY_TIMEOUT_MS`
+默认 3s 超时）。要加别的位置用环境变量：
+
+```bash
+export LOCAL_LLAMA_EXE_DIR="$HOME/llama:$HOME/opt/llama.cpp"
+export LOCAL_LLAMA_MODELS_DIR="$HOME/llama/models:$HOME/models"
+```
+
+也可以写进 `cordis.patch.yml` 的 `config.executable` / `config.modelsDir`——插件自带的
+这份故意留空（见文件内注释），就是为了不写死任何机器路径。用户在 `/settings` 保存的值
+走 profile 级 overlay，插件出厂配置不受影响。
+
+### 同步产物（只有方式 B 需要）
 
 `npx tsc` 只写源码目录的 `dist`，profile 里那份**不会自动更新**——宿主会报
 `1 entry did not activate: ERR_MODULE_NOT_FOUND ...dist\diag.js`。
@@ -66,8 +121,10 @@ rm -f "$PROFILE/package.json" "$PROFILE/cordis.patch.yml"
 cp package.json cordis.patch.yml "$PROFILE/"
 ```
 
-> 或者跑 `npm run link:host`（`_link.cjs`），它封装了上面这套流程。
+> 方式 A（tarball）不需要这一步——包里的产物就是那次 `npm pack` 时的快照。
 > 同步完用 `stat -c %i` 对比两边 inode：不同就是独立副本，下次编译还得再同步。
+> 另外 `npm run link:host`（`_link.cjs`）跟同步产物无关，它只把宿主自带的
+> `@deepseek-ai/*` 链进本仓库供 `tsc` 解析类型。
 
 ### 改完照跑的四条验证
 
@@ -79,8 +136,20 @@ grep -hoE "from '([^']+" dist/*.js | sort -u
 dsh --profile dsh-tui --help 2>&1 | grep -aE "activate|failed"   # 不能出现激活失败
 cat ~/.dsh-tui/local-llama-diag.log                                # 看 register-OK / sections-OK
 
-node test/smoke.mjs          # 宿主 seam 路径：真拉 llama-server 出字
-node test/fallback-spawn.mjs # 本地 child_process 回退路径
+node test/smoke.mjs           # 宿主 seam 路径：真拉 llama-server 出字
+node test/fallback-spawn.mjs  # 本地 child_process 回退路径
+```
+
+两个测试都不写死路径，留空就走自动发现；要指定就传环境变量：
+
+```bash
+LLAMA_EXE="$HOME/llama/llama-server.exe" \
+LLAMA_MODELS="$HOME/llama/models" \
+  node test/smoke.mjs
+
+LLAMA_EXE="$HOME/llama/llama-server.exe" \
+LLAMA_MODEL="$HOME/llama/models/qwen3-5-4B-Q4_K_M.gguf" \
+  node test/fallback-spawn.mjs
 ```
 
 插件在宿主里是非 TTY 场景跑不起来的（dsh-tui 要求 stdout 是 TTY），所以回归测试
@@ -161,12 +230,12 @@ node test/fallback-spawn.mjs # 本地 child_process 回退路径
 
 ## 热生效语义
 
-改保存后插件按字段分类处理，这是**实测行为**，不是设计意图：
+改保存后插件按字段分类处理：
 
 - **L0 立即生效，不动进程**（7 个）：`temperature`（随请求带）、`disableThinking`
   （随请求带 `chat_template_kwargs`）、`displayName`、`debug`、`autoStart`、
   `initialModel`、`idleStopMs`。
-- **L1 重启 llama-server**（21 个，实测约 2.4s）：其余全部——包括所有采样参数。
+- **L1 重启 llama-server**（21 个）：其余全部——包括所有采样参数。
   原因是 pi-ai 的 `openai-completions` 只透传 `temperature` + `maxTokens` 两个采样字段，
   `top_p` / `top_k` / `min_p` / `repeat_penalty` / `seed` 在请求体里根本不存在，
   所以只能作为 llama-server 的 CLI 启动参数。
@@ -177,15 +246,15 @@ node test/fallback-spawn.mjs # 本地 child_process 回退路径
 用户在 `/settings` 保存的值落到 `~/.dsh/profiles/dsh-tui/cordis.patch.yml`
 （profile 级 overlay），插件自带的 `cordis.patch.yml` 保持出厂默认不动。
 
-> 显存提示：本机 GPU 实际是 **6140 MiB**（`llama-server --list-devices`），
-> 不是 Windows WMI 报的 4GB。`ctxSize 8192` 实测吞吐 47.7 tok/s。
-> `ctxSize` 翻倍则 KV cache 近似翻倍——OOM 或掉速先怀疑它。
+> 显存提示：`ctxSize` 翻倍则 KV cache 近似翻倍——OOM 或掉速先怀疑它。
+> 用 `llama-server --list-devices` 看 GPU 实际显存（Windows WMI 报的数可能不准）。
+> 参考：6140 MiB 显存、`ctxSize 8192` 约 47.7 tok/s。
 
 ---
 
 ## 实现要点
 
-几条反直觉的约束，是这份代码长成现在这样的原因：
+几条容易踩的约束：
 
 1. **`Config` 必须是真 schemastery 实例，每个叶子 `.volatile()`、`.default()`，
    顶层不能 `.volatile()`，也不要 `.required()`。** 缺一条 `/settings` 都会退化：
@@ -222,9 +291,9 @@ node test/fallback-spawn.mjs # 本地 child_process 回退路径
 - `gracefulStop()` 在 disposer 里是 fire-and-forget，dsh 硬退时可能留孤儿；
   靠 `pid.json` 收养/杀掉旧进程兜底。
 - Windows 管道模式下 `SIGINT` 对原生 `.exe` 基本无效，`--no-ui` 下也没有确认提示，
-  所以优雅退出实际是走完宽限期后靠 `terminate()` 兜底——最坏约 14s，实测 15s 内干净退出。
-- `strategy: router` 依赖 llama.cpp 的 `/models/load` 热切接口，本插件只实现了
-  `single` 路径的完整验证。
+  所以优雅退出实际是走完宽限期后靠 `terminate()` 兜底，最坏十几秒。
+- `strategy: router` 依赖 llama.cpp 的 `/models/load` 热切接口，本插件只完整验证过
+  `single` 路径。
 - 模型 provider 的 `api` 只能是 `openai-completions` / `openai-responses` /
   `anthropic-messages` 三选一，本地 llama.cpp 只能伪装成 `openai-completions`。
 - 本插件不含也不分发 llama.cpp 二进制或模型权重，那些要你自己装（见下一节）。

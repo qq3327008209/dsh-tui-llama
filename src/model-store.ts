@@ -5,7 +5,7 @@
  *   - single：`-m <绝对路径>` 启动，llama.cpp 的请求体 model 字段不校验具体值
  *   - router：`--models-dir` + `POST /models/load {model: "<id>.gguf"}`
  *
- * 不做 mmproj 视觉投影配对：本机没有 mmproj 文件，留到有需要再加。
+ * 不做 mmproj 视觉投影配对。
  */
 import { readdirSync, statSync, watch as fsWatch } from 'node:fs';
 import { basename, dirname, join } from 'node:path';

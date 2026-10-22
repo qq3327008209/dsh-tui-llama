@@ -169,15 +169,17 @@ const step = (label) => console.log(`\n━━━ ${label}  (+${((Date.now() - st
 
 step('1. apply()');
 const entryConfig = {
-  executable: 'D:\\llama\\llama-server.exe',
-  modelsDir: 'D:\\llama\\models',
+  // 留空 = 走插件的自动发现（~/llama、~/llama.cpp、PATH，或 LOCAL_LLAMA_EXE_DIR /
+  // LOCAL_LLAMA_MODELS_DIR 指定的目录）。也可用 LLAMA_EXE / LLAMA_MODELS 显式指定。
+  executable: process.env.LLAMA_EXE ?? '',
+  modelsDir: process.env.LLAMA_MODELS ?? '',
   host: '127.0.0.1',
   port: 8642,
   ctxSize: 8192,
   gpuLayers: 999,
   autoStart: false, // 我们手动触发，先看 listModels
   debug: true,
-  startTimeoutMs: 90_000, // 本机实测 2s 就绪，给足余量避免误判
+  startTimeoutMs: 90_000, // 就绪通常 2-4s，给足余量
 };
 
 /** 失败时把 llama-server 的 argv + stderr 打出来，定位"为什么没就绪"。 */

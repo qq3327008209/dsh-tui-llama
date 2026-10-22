@@ -2,7 +2,7 @@
  * OpenAI 兼容适配器：把 dsh 的 GenerateOptions 翻成 llama.cpp 的
  * `/v1/chat/completions` 请求，SSE 流回译成 StreamChunk。
  *
- * 关键点（实测结论，见 DESIGN.md §6）：
+ * 关键点：
  *   - 每请求只有 temperature / max_tokens 能热生效；top_p / top_k / min_p /
  *     repeat_penalty / seed 都是 llama-server 启动参数，由 llama-server.ts 注入 argv。
  *   - Qwen3 默认开 thinking：整段输出进 reasoning_content，content 为空且

@@ -1,16 +1,15 @@
 /**
  * llama.cpp 进程管理器。
  *
- * 从 dsh-llamacpp-bridge 的 llama-server.js 移植，改动：
- *   - argv 补采样参数（--temp/--top-p/--top-k/--min-p/--repeat-penalty/--seed）。
- *     dsh 的 GenerateOptions 没有这些字段，它们只能作为启动参数（DESIGN.md §6 L1）。
- *   - `--no-webui` → `--no-ui`（b11784 弃用）。
- *   - 加 `--api-key`（默认不设会警告 "CORS allows all origins"）。
- *   - 启动前端口探测，占用则 fail-fast，不重试。
- *   - 优雅退出全程不直杀：Ctrl+C → 等提示 → Y → 再 Ctrl+C → 最后 terminate()。
+ * argv 构造约定：
+ *   - 采样参数（--temp/--top-p/--top-k/--min-p/--repeat-penalty/--seed）只能作为
+ *     启动参数，dsh 的 GenerateOptions 里没有这些字段。
+ *   - `--no-ui`（`--no-webui` 在较新版本已弃用）。
+ *   - `--api-key` 不设会告警 "CORS allows all origins"。
+ *   - 启动前探测端口，占用则 fail-fast，不重试。
  *
- * 关停可靠性：spawn() 拿到的 PID 就是监听进程（实测，非 shim），
- * 所以 handle.terminate() 单点即可，Job Object 由 dsh-subprocess-local 兜底。
+ * 关停：spawn() 拿到的 PID 就是监听进程，`handle.terminate()` 单点即可，
+ * 不需要 taskkill 或反查真实 PID。Job Object 由 dsh-subprocess-local 兜底。
  */
 import { readFileSync, unlinkSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import { spawn as cpSpawn } from 'node:child_process';
@@ -21,15 +20,12 @@ import { PID_REL, TERMINATE_GRACE_MS, expandPath, llamaHeaders } from './config.
 import { LogHub, stripAnsi } from './log-hub.js';
 /* ---------------- 本地子进程回退 ---------------- */
 /**
- * 用 `node:child_process.spawn` 实现同一个 SubprocessRuntime 接口。
+ * 用 `node:child_process.spawn` 实现同一个 SubprocessRuntime 接口，
+ * 在宿主没有提供 subprocess 服务时兜底。
  *
- * 为什么需要：TUI profile 的 fiber 树里没有 subprocess 服务
- * （真机实测：根 fiber 只提供 dshHomePath / profileContext / launchEnvironment /
- * cmdlineArgs / appExit / appReady，Loader fiber 只有 loader）。
- * 宿主提供的实现还额外做 Job Object 归属，但本插件自己就负责停进程，
- * 少一个 Job Object 是可接受代价——比"能显示但拉不起服务"好。
- * 只实现 spawn()，不实现 spawnTerminal()：startProcess() 在 spawnTerminal
- * 缺失时本来就走管道模式，那正是我们想要的（llama-server 配 --no-ui）。
+ * 宿主实现额外做 Job Object 归属，本插件自己负责停进程，少一个 Job Object
+ * 是可接受代价。只实现 `spawn()`、不实现 `spawnTerminal()`：`startProcess()`
+ * 在 `spawnTerminal` 缺失时走管道模式，那正是想要的（llama-server 配 --no-ui）。
  */
 class StreamCollector {
     parts = [];

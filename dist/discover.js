@@ -9,34 +9,36 @@ import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { DISCOVERY_TIMEOUT_MS, expandPath } from './config.js';
 const EMPTY = { executables: [], modelsDirs: [], models: [], updatedAt: '' };
-/** 可执行文件候选。release zip 解压式布局放在前面（本机实际就是这样）。 */
+/**
+ * 可执行文件候选。全部相对用户 home 或 PATH，不写死任何盘符。
+ * 额外候选可用环境变量追加：LOCAL_LLAMA_EXE_DIR（逗号分隔，最高优先）。
+ */
 const EXE_ROOTS = () => {
     const home = homedir();
-    const roots = [
-        'D:/llama',
-        `${home}/llama`,
-        'D:/llama.cpp',
-        `${home}/llama.cpp/build`,
-        `${home}/llama.cpp/build/bin`,
-        `${home}/llama.cpp/build/bin/release`,
-        `${home}/Desktop/llama`,
-        `${home}/Desktop/llama.cpp`,
-    ];
-    for (const dir of (process.env.PATH ?? '').split(':').filter(Boolean))
+    const roots = extraDirs('LOCAL_LLAMA_EXE_DIR');
+    roots.push(`${home}/llama`, `${home}/llama.cpp`, `${home}/llama.cpp/build`, `${home}/llama.cpp/build/bin`, `${home}/llama.cpp/build/bin/release`, `${home}/Desktop/llama`, `${home}/Desktop/llama.cpp`);
+    // Windows 用 ; 分隔 PATH，其他平台用 :。两者都扫，不猜平台。
+    for (const dir of (process.env.PATH ?? '').split(/[;:]/).filter(Boolean))
         roots.push(dir);
     return roots;
 };
 const MODEL_ROOTS = () => {
     const home = homedir();
     return [
-        'D:/llama/models',
+        ...extraDirs('LOCAL_LLAMA_MODELS_DIR'),
         `${home}/llama/models`,
         `${home}/llama.cpp/models`,
-        'D:/llama.cpp/models',
         `${home}/models`,
         `${home}/Desktop`,
     ];
 };
+/** 读逗号分隔的环境变量，逐个展开 ~ 前缀。 */
+function extraDirs(envKey) {
+    return (process.env[envKey] ?? '')
+        .split(',')
+        .map((s) => expandPath(s.trim()))
+        .filter(Boolean);
+}
 const EXE_NAMES = ['llama-server.exe', 'llama-server', 'llama.exe', 'llama'];
 function candidateFiles() {
     const found = [];

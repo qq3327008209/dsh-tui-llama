@@ -22,6 +22,7 @@ import type { SettingsForms } from '@deepseek-ai/dsh-settings';
 import {
   describe as describeDiag,
   dumpFiberChain,
+  logDiag as diagLog,
   probeGet,
   probeSeams,
   read as probeRead,
@@ -52,27 +53,12 @@ export const name = ENTRY_ID;
  * dsh-settings 的 describe() 对每个 entry 调 volatileForm(Config)：标了
  * volatile 才会投影出表单、才会产出 namespace。没有 namespace 时
  * SettingsForm.save() 直接 return false，设置面板全空白且只读。
- *
- * 之前为了去掉 schemastery 运行期依赖删掉过这个导出，代价就是面板只读；
- * 现在 schemastery 走包内 vendor（#schemastery），运行期能解析，
- * 所以恢复导出。详见 ./config.ts 顶部说明。
- *
- * 注意仍然**不能**加 default export —— 加载器的 unwrapExports 一见 default
- * 就把模块坍缩成它，name/Config/apply 全丢。
+ * 为什么 schemastery 必须走包内 vendor（而不是依赖）见 ./config.ts 顶部说明。
  */
 export { Config };
 
-/* 真机诊断：模块是否被加载、apply() 是否被调用。
- * 产物不能有任何运行期外部包，所以这是 node:fs 写的自包含探针（./diag.ts）。 */
-import { appendFileSync as diagAppend } from 'node:fs';
-const DIAG_LOG = process.env.LOCAL_LLAMA_LOG ?? 'C:/Users/John Smish/.dsh-tui/local-llama-diag.log';
-function diagLog(kind: string, message: string): void {
-  try {
-    diagAppend(DIAG_LOG, `[${new Date().toISOString()}] [${process.pid}] ${kind}: ${message}\n`, 'utf8');
-  } catch {
-    /* 探针不影响主流程 */
-  }
-}
+/* 诊断日志路径见 ./diag.ts 的 diagLogPath()：默认 ~/.dsh-tui/local-llama-diag.log，
+ * 可用 LOCAL_LLAMA_LOG 覆盖。 */
 function safeJson(v: unknown): string {
   try {
     return JSON.stringify(v)?.slice(0, 300) ?? 'undefined';
@@ -140,7 +126,7 @@ export function apply(ctx: Context, entry: Partial<LlamaConfig>): () => void {
   /** 逆序执行的清理列表：先 push 的最后执行。 */
   const teardown: Array<() => void> = [];
 
-  /* ---- 0. 软探测所有 seam（带真机诊断，见 ./diag.ts）---- */
+  /* ---- 0. 软探测所有 seam ---- */
   diagLog('apply-start', `ctx.keys=${JSON.stringify(Object.keys(ctx))}`);
   probeSeams(
     ctx,

@@ -26,16 +26,23 @@
   "files": [
     "dist/**/*.js",
     "vendor/*.js",
+    "vendor/*.d.ts",
+    "src/**/*.ts",
+    "test/**/*.mjs",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
+    "tsconfig.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "_link.cjs"
   ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "link:host": "node _link.cjs"
+    "test": "node test/fallback-spawn.mjs && node test/smoke.mjs",
+    "link:host": "node _link.cjs",
+    "release": "npm run build && npm pack"
   },
   "engines": {
     "node": ">=20"

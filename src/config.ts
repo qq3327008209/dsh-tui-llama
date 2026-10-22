@@ -1,26 +1,24 @@
 /**
  * 插件常量与配置模型。
  *
- * 参数分层（决定 UI 分组与热生效语义，见 DESIGN.md §6）：
- *   L0 每请求热生效 —— dsh 的 GenerateOptions 只带 temperature / maxTokens，
- *      其余采样字段在这个协议里根本不存在，所以它们只能走 L1。
- *   L1 llama-server 重启生效（插件自己 stop→start，实测 ~2.4s）—— 包括全部
- *      采样参数，因为它们只能作为 CLI 启动参数。
+ * 参数分层决定 UI 分组与热生效语义：
+ *   L0 每请求热生效 —— 只有 temperature / maxTokens 能走这里，其余采样字段
+ *      在 dsh 的 GenerateOptions 里根本不存在，所以只能走 L1。
+ *   L1 llama-server 重启生效 —— 全部采样参数，它们只能作为 CLI 启动参数。
  *   L2 dsh 重启生效 —— provider 静态声明类字段。
  */
 /**
  * schemastery 走包内 vendor（`#schemastery` → ./vendor/schemastery.js）。
  *
- * 为什么要真 schema：`@deepseek-ai/dsh-settings` 的 `describe()` 用
+ * Config 必须是真 schemastery 实例：dsh-settings 的 `describe()` 用
  * `volatileForm(schema)` 决定一个 entry 会不会产出 settings namespace，而
- * `volatileForm` 内部调 `schema.toJSON()` 和 `new z(json)` —— 纯对象没有
+ * `volatileForm` 内部调 `schema.toJSON()` 和 `new z(json)`——纯对象没有
  * `toJSON()` 会直接抛，没有任何 volatile 节点则返回 undefined。没有 namespace
- * 时 TUI 设置屏里 `SettingsForm.save()` 第一行就是 `return false`，面板变成
- * 全空白只读。所以 Config 必须是真 schemastery 实例。
+ * 时 `SettingsForm.save()` 第一行就是 `return false`，面板全空白且只读。
  *
- * 为什么是 vendor 而不是依赖：插件装在 profile 的 node_modules 下，宿主不把
- * @deepseek-ai/* 提升到这里，裸 specifier 解析不到（之前踩过，整个模块加载失败）。
- * vendor 副本经 package.json 的 "imports" 映射解析，pnpm 清理不掉。
+ * 不能直接依赖 `@deepseek-ai/schemastery`：插件装在 profile 的 node_modules 下，
+ * 宿主不向那里提升 `@deepseek-ai/*`，裸 specifier 会 `ERR_MODULE_NOT_FOUND`。
+ * vendor 副本经 package.json 的 `imports` 映射解析，pnpm 清理不掉。
  */
 import z from '#schemastery';
 

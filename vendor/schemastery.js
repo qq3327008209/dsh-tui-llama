@@ -2,7 +2,7 @@
  * Vendored copy — do not edit independently.
  *
  * Package : @deepseek-ai/schemastery@3.18.5
- * Upstream: D:/node/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/schemastery/lib/index.mjs
+ * Upstream: npm @deepseek-ai/schemastery@3.18.5, file lib/index.mjs
  * License : MIT (full text below)
  * Change  : exactly one line rewritten — the `@deepseek-ai/cosmokit` import is
  *           redirected to the package-local `#cosmokit` specifier. Nothing else

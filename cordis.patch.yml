@@ -2,12 +2,16 @@
 # 单包单插件：一个 entry，name = 包名，loader 以该 specifier import() 本包并
 # 调用其导出的 apply(ctx, config)。config 里的值只作 settings 的 base 层默认，
 # 用户在 /settings 保存的值永远优先。
+#
+# executable / modelsDir 故意留空：不写死任何机器路径，交给插件的自动发现
+# （扫描 ~/llama、~/llama.cpp、~/Desktop、PATH，以及 LOCAL_LLAMA_EXE_DIR /
+# LOCAL_LLAMA_MODELS_DIR 环境变量指定的目录）。装完直接在 /settings 里填也行。
 - insert:
     - id: dsh-tui-local-llama
       name: dsh-tui-local-llama
       config:
-        executable: D:\llama\llama-server.exe
-        modelsDir: D:\llama\models
+        executable: ""
+        modelsDir: ""
         host: 127.0.0.1
         port: 8642
         ctxSize: 8192

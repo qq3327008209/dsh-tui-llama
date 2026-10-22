@@ -1,49 +1,47 @@
 /**
- * 真机诊断探针。
+ * 诊断探针。
  *
- * 为什么需要它：之前所有验证都跑在 test/smoke.mjs 的假 seam 上，从没拿到过
- * 一次真实 dsh 运行的观测。表现是「/model 里没有本地模型」，但到底是
- *   (a) 模块加载失败 → apply() 从未执行
- *   (b) apply() 执行了但 ctx.llm 不可得 → 主动跳过注册
- *   (c) 注册被宿主拒收（抛错）
- * 三种都长得一模一样，只能靠探针区分。
+ * 「/model 里没有本地模型」有两种原因：模块没被加载（apply() 从未执行），
+ * 或加载了但注册被宿主拒收。两者在宿主里表现完全一样，只能靠写日志区分。
  *
- * 这个文件零外部依赖（只用 node:fs），因为产物不能有任何运行期外部包——
- * 见 ./shims.ts 顶部说明。
+ * 只用 node: 内置模块，因为产物不能带运行期外部依赖（见 ./shims.ts）。
+ * 所有失败都静默，探针绝不影响主流程。
  */
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 
-const DEFAULT_LOG = 'C:/Users/John Smish/.dsh-tui/local-llama-diag.log';
+/**
+ * 诊断日志位置。默认在用户 home 下，跨机器可用；
+ * 环境变量 LOCAL_LLAMA_LOG 可覆盖（绝对或相对路径都接受）。
+ */
+export function diagLogPath(): string {
+  return process.env.LOCAL_LLAMA_LOG ?? join(homedir(), '.dsh-tui', 'local-llama-diag.log');
+}
 
-function logLine(kind: string, message: string): void {
+/** 写一行诊断日志。探针绝不能影响主流程——任何失败都静默。 */
+export function logDiag(kind: string, message: string): void {
   try {
-    const target = process.env.LOCAL_LLAMA_LOG ?? DEFAULT_LOG;
-    appendFileSync(
-      target,
-      `[${new Date().toISOString()}] [${process.pid}] ${kind}: ${message}\n`,
-      'utf8',
-    );
+    const target = diagLogPath();
+    mkdirSync(dirname(target), { recursive: true });
+    appendFileSync(target, `[${new Date().toISOString()}] [${process.pid}] ${kind}: ${message}\n`, 'utf8');
   } catch {
     /* 探针绝不能影响主流程 */
   }
 }
 
 /**
- * 把 seam 探测包装成带观测的版本。
- *
- * `read()` 原本吞掉异常只留 undefined，等于把「服务不可得」和「异常」
- * 压成同一种表现。这里把两种情况分别记下来。
- *
- * 另：如果 ctx 是可枚举对象，导出它的 key 列表——这是判断「宿主给这个
- * 插件作用域暴露了哪些服务」最直接的证据。
+ * 读一个 seam 并记录结果。
+ * 区分「服务不可得」（返回 undefined）和「访问抛异常」——两者压成同一个
+ * undefined 就无从排查了。
  */
 export function read<T>(label: string, fn: () => T): T | undefined {
   try {
     const value = fn();
-    logLine('seam', `${label} = ${value === undefined ? 'undefined' : typeof value}`);
+    logDiag('seam', `${label} = ${value === undefined ? 'undefined' : typeof value}`);
     return value;
   } catch (err) {
-    logLine('seam-error', `${label} threw: ${describe(err)}`);
+    logDiag('seam-error', `${label} threw: ${describe(err)}`);
     return undefined;
   }
 }

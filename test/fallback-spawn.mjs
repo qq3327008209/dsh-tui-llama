@@ -2,20 +2,33 @@
  * 验证 localSubprocess() 回退实现：宿主没有 subprocess 服务时，
  * 插件用 node:child_process 自己拉 llama-server。
  *
- * 背景：真宿主实测 dsh-tui profile 的 fiber 树里根本没有 subprocess 服务
- * （根 fiber 只提供 dshHomePath/profileContext/launchEnvironment/cmdlineArgs/
- * appExit/appReady，Loader fiber 只有 loader）。而且真宿主在非 TTY 下立刻退出，
- * autoStart 跑不完，所以回退路径只能在这里单独验。
+ * dsh-tui profile 里没有 subprocess 服务，所以这条路径只能在这里单独验
+ * （真宿主在非 TTY 下立刻退出，跑不完 autoStart）。
  *
  * 用法：node test/fallback-spawn.mjs
- * 只做一件事：真的 spawn 一次 llama-server，等 /v1/health 就绪，
- * 再从收集到的 stdout 里确认它真的启动成功了。
+ * 做一件事：真的 spawn 一次 llama-server，等 /v1/health 就绪，
+ * 再从收集到的输出里确认它真的加载了模型。
  */
 import { localSubprocess } from '../dist/llama-server.js';
+import { discoverEnvironment } from '../dist/discover.js';
 
-const EXE = process.env.LLAMA_EXE ?? 'D:\\llama\\llama-server.exe';
-const MODEL = process.env.LLAMA_MODEL ?? 'D:\\llama\\models\\qwen3-5-4B-Q4_K_M.gguf';
+// 路径全部来自环境变量或自动发现，不写死任何机器路径。
+// LLAMA_EXE / LLAMA_MODEL / LLAMA_PORT 可覆盖；留空则扫 ~/llama、~/llama.cpp、PATH 等。
+const found = discoverEnvironment();
+const EXE = process.env.LLAMA_EXE ?? found.executables[0]?.path ?? '';
+const MODEL = process.env.LLAMA_MODEL ?? found.models[0] ?? '';
 const PORT = Number(process.env.LLAMA_PORT ?? 8651);
+
+if (!EXE) {
+  console.error('FAIL: 找不到 llama-server。设置 LLAMA_EXE，或把可执行文件放到 ~/llama / ~/llama.cpp，' +
+    '或用 LOCAL_LLAMA_EXE_DIR=逗号分隔目录 追加候选。');
+  process.exit(1);
+}
+if (!MODEL) {
+  console.error('FAIL: 找不到 GGUF 模型。设置 LLAMA_MODEL，或把 .gguf 放到 ~/llama/models，' +
+    '或用 LOCAL_LLAMA_MODELS_DIR=逗号分隔目录 追加候选。');
+  process.exit(1);
+}
 
 const argv = [
   EXE,
