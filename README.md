@@ -42,19 +42,19 @@ dsh-tui 的本地推理插件：在终端里 `/model` 选一个本地 GGUF 模�
 
 ### 方式 A：装打包好的 tarball（推荐给使用者）
 
-`npm pack` 产出 `dsh-tui-local-llama-0.2.0.tgz`，里面已经带好编译好的 `dist/`、
+`npm pack` 产出 `dsh-tui-local-llama-0.3.0.tgz`，里面已经带好编译好的 `dist/`、
 `vendor/`、`cordis.patch.yml`、`README`、`LICENSE`，拿到就能用，不需要 Node 构建环境：
 
 ```bash
 cd ~/.dsh/profiles/dsh-tui
-pnpm add ./dsh-tui-local-llama-0.2.0.tgz
+pnpm add ./dsh-tui-local-llama-0.3.0.tgz
 ```
 
 不想自己找 tarball，直接从 git tag 装，效果一样（tarball 也提交进了仓库）：
 
 ```bash
 cd ~/.dsh/profiles/dsh-tui
-pnpm add github:qq3327008209/dsh-tui-llama@v0.2.0
+pnpm add github:qq3327008209/dsh-tui-llama@v0.3.0
 ```
 
 ### 方式 B：直接指向源码目录（开发时用）

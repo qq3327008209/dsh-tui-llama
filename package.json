@@ -1,6 +1,6 @@
 {
   "name": "dsh-tui-local-llama",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "dsh-tui 本地 llama.cpp 模型插件：选中即拉起 llama-server，退出即关停，参数在 TUI 内可调",
   "license": "MIT",
