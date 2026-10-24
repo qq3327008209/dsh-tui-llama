@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path';
 import { connect as netConnect } from 'node:net';
 import type { Readable, Writable } from 'node:stream';
 import type { LlamaConfig } from './config.js';
-import { PID_REL, TERMINATE_GRACE_MS, expandPath, llamaHeaders } from './config.js';
+import { PID_REL, TERMINATE_GRACE_MS, expandPath, llamaHeaders, toNativePath } from './config.js';
 import type { ModelInfo } from './model-store.js';
 import { LogHub, stripAnsi } from './log-hub.js';
 
@@ -497,6 +497,10 @@ export class LlamaServerManager {
     if (cfg.flashAttn !== 'auto') argv.push('--flash-attn', cfg.flashAttn);
     if (cfg.cacheTypeK) argv.push('-ctk', cfg.cacheTypeK);
     if (cfg.cacheTypeV) argv.push('-ctv', cfg.cacheTypeV);
+    if (cfg.chatTemplate) {
+      // --jinja 必须排在 --chat-template-file 之前：不带它时只有内置模板名被接受。
+      argv.push('--jinja', '--chat-template-file', toNativePath(expandPath(cfg.chatTemplate)));
+    }
     argv.push('--temp', String(cfg.temperature));
     argv.push('--top-p', String(cfg.topP));
     if (cfg.topK > 0) argv.push('--top-k', String(cfg.topK));
@@ -537,6 +541,12 @@ export class LlamaServerManager {
     }
     if (mode === 'single' && !statSync(exe).isFile()) {
       throw new Error(`[local-llama] executable 不是文件: ${exe}`);
+    }
+    if (cfg.chatTemplate) {
+      const tpl = expandPath(cfg.chatTemplate).trim();
+      if (!existsSync(tpl)) {
+        throw new Error(`[local-llama] 对话模板不存在: ${tpl}（在 /settings → 本地模型 改 chatTemplate，留空则用 GGUF 自带模板）`);
+      }
     }
 
     this.status = { ...this.status, strategy: cfg.strategy };

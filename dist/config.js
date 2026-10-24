@@ -46,6 +46,7 @@ export const DEFAULTS = {
     displayName: 'Local llama.cpp',
     executable: '',
     modelsDir: '',
+    chatTemplate: '',
     host: '127.0.0.1',
     port: 8642,
     strategy: 'single',
@@ -99,6 +100,7 @@ export const Config = z
     displayName: z.string().default(DEFAULTS.displayName).volatile(),
     executable: z.string().default(DEFAULTS.executable).volatile(),
     modelsDir: z.string().default(DEFAULTS.modelsDir).volatile(),
+    chatTemplate: z.string().default(DEFAULTS.chatTemplate).volatile(),
     host: z.string().default(DEFAULTS.host).volatile(),
     port: z.number().default(DEFAULTS.port).volatile(),
     strategy: z.string().default(DEFAULTS.strategy).volatile(),
@@ -196,4 +198,14 @@ export function expandPath(p) {
         return (process.env.USERPROFILE ?? '') + p.slice(1);
     }
     return p;
+}
+/**
+ * 转成本机原生路径分隔符。
+ *
+ * 只有传给 llama.cpp 的文件类参数需要它：`-m` 和可执行文件走 CreateProcess，
+ * 正斜杠也能吃；但 `--chat-template-file` 的 `C:/Users/...` 在 b11784 里会被解析成
+ * `C:` 加上 cwd 拼出来的怪路径而打不开（`C:\Users\...` 正常）。
+ */
+export function toNativePath(p) {
+    return process.platform === 'win32' ? p.replace(/\//g, '\\') : p;
 }

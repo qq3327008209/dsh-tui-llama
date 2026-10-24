@@ -202,7 +202,7 @@ export function apply(ctx: Context, entry: Partial<LlamaConfig>): () => void {
   const entryConfig = adopt(entry);
   // 观测：区分「schema 校验失败」和「volatile handle 没解开」。
   // 没解开时 JSON.stringify(entry.port) 是 {} 而不是 8642。
-  diagLog('entry-config', `port=${entryConfig.port} ctxSize=${entryConfig.ctxSize} exe=${entryConfig.executable} displayName=${entryConfig.displayName}`);
+  diagLog('entry-config', `port=${entryConfig.port} ctxSize=${entryConfig.ctxSize} exe=${entryConfig.executable} tpl=${entryConfig.chatTemplate || '<gguf>'} displayName=${entryConfig.displayName}`);
   diagLog('entry-raw-shape', safeJson({ port: entry.port, displayType: typeof entry.displayName, disp: entry.displayName }));
   const cfg = { current: entryConfig, prev: entryConfig };
 

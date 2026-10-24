@@ -90,6 +90,16 @@ export function buildSettingsSection(ns) {
                 parse: str,
             },
             {
+                path: ['chatTemplate'],
+                label: 'Chat template',
+                descriptions: { zh: '对话模板' },
+                hint: '自定义 Jinja 模板文件；留空用 GGUF 自带模板',
+                group: 'general',
+                kind: 'text',
+                placeholder: '~/Downloads/chat_template.jinja',
+                parse: str,
+            },
+            {
                 path: ['strategy'],
                 label: 'Strategy',
                 descriptions: { zh: '启动策略' },
@@ -361,6 +371,7 @@ export function describeStatus(s, cfg) {
 const RESTART_KEYS = [
     'executable',
     'modelsDir',
+    'chatTemplate',
     'host',
     'port',
     'strategy',

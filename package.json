@@ -40,7 +40,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "node test/route-gate.mjs && node test/fallback-spawn.mjs && node test/smoke.mjs",
+    "test": "node test/chat-template.mjs && node test/route-gate.mjs && node test/fallback-spawn.mjs && node test/smoke.mjs",
     "link:host": "node _link.cjs",
     "release": "npm run build && npm pack"
   },

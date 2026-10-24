@@ -66,7 +66,7 @@ function makeSubprocess() {
       });
       const stdout = new Collector();
       const stderr = new Collector();
-      const record = { argv: spec.argv.join(' '), stderr: () => stderr.buf };
+      const record = { argv: spec.argv.join(' '), argvList: spec.argv.slice(), stderr: () => stderr.buf };
       spawned.push(record);
       let doneRes;
       const done = new Promise((r) => (doneRes = r));
@@ -183,6 +183,7 @@ const entryConfig = {
   // LOCAL_LLAMA_MODELS_DIR 指定的目录）。也可用 LLAMA_EXE / LLAMA_MODELS 显式指定。
   executable: process.env.LLAMA_EXE ?? '',
   modelsDir: process.env.LLAMA_MODELS ?? '',
+  chatTemplate: process.env.LLAMA_CHAT_TEMPLATE ?? '', // 设了就校验 --jinja / --chat-template-file 的接线
   host: '127.0.0.1',
   port: Number(process.env.LLAMA_PORT ?? 8642),
   ctxSize: 8192,
@@ -295,6 +296,37 @@ try {
   process.exit(1);
 } finally {
   clearTimeout(timeout);
+}
+
+step('4b. 启动参数接线');
+const args = subprocess.spawned.at(-1)?.argvList ?? [];
+console.log(' argv:', subprocess.spawned.at(-1)?.argv ?? '(没有进程)');
+if (entryConfig.chatTemplate) {
+  const i = args.indexOf('--chat-template-file');
+  if (i < 0) {
+    console.error('FAIL: argv 里没有 --chat-template-file');
+    process.exit(1);
+  }
+  if (!args.includes('--jinja')) {
+    console.error('FAIL: argv 里没有 --jinja（只有它才吃自定义 Jinja 模板）');
+    process.exit(1);
+  }
+  if (args.indexOf('--jinja') > i) {
+    console.error('FAIL: --jinja 必须排在 --chat-template-file 之前');
+    process.exit(1);
+  }
+  const token = args[i + 1];
+  if (process.platform === 'win32' && token.includes('/')) {
+    console.error(`FAIL: --chat-template-file 的路径是正斜杠，llama.cpp 打不开：${token}`);
+    process.exit(1);
+  }
+  console.log('ok  --jinja + --chat-template-file 接线正确，路径 =', token);
+} else {
+  if (args.includes('--chat-template-file')) {
+    console.error('FAIL: 没配 chatTemplate 却传了 --chat-template-file');
+    process.exit(1);
+  }
+  console.log('ok  未配置 chatTemplate 时不传模板参数（用 GGUF 自带模板）');
 }
 
 step('5. 关停：调用 disposer');

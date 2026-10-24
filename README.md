@@ -95,6 +95,10 @@ TypeScript 类型解析用**，运行期完全不需要；产物本身零外部�
 - **Executable** —— llama-server 路径，例如 `~/llama/llama-server.exe`
 - **Models dir** —— GGUF 模型目录，例如 `~/llama/models`
 
+可选第三项 **Chat template** —— 自定义 Jinja 对话模板文件，例如
+`~/Downloads/chat_template.jinja`。想让模型走特定模板（带 tools / vision /
+`reasoning_effort` 之类特性的第三方模板）时填它；留空就用 GGUF 元数据自带的模板。
+
 `~` 会被插件展开成用户 home。
 
 **都留空也行**：插件会扫 `~/llama`、`~/llama.cpp`（含 `build/`、`build/bin/`、
@@ -124,7 +128,7 @@ export LOCAL_LLAMA_MODELS_DIR="$HOME/llama/models:$HOME/models"
 ## 使用
 
 - `/model` —— 列表里出现 `llama-local/<模型名>`。选中即加载，dsh 的 agent 走本地服务。
-- `/settings` —— 「Local llama.cpp」区块，28 个字段分 5 组。改完保存即生效（见下节）。
+- `/settings` —— 「Local llama.cpp」区块，29 个字段分 5 组。改完保存即生效（见下节）。
 - `alt+l` —— 切换服务启停。状态栏显示 `llama 运行中 · <模型> · 127.0.0.1:8642`。
 - 退出 dsh —— 撤 UI 贡献 → 撤事件监听 → 拆模型目录 → 优雅停 llama-server。
   下次启动时会读 `pid.json`，收养或杀掉上次残留的孤儿进程。
@@ -178,6 +182,7 @@ export LOCAL_LLAMA_MODELS_DIR="$HOME/llama/models:$HOME/models"
 | `displayName` | `Local llama.cpp` | `/model` 列表里的展示名 |
 | `executable` | `""` | llama-server 路径。空 = 自动发现 |
 | `modelsDir` | `""` | GGUF 目录。空 = 自动发现 |
+| `chatTemplate` | `""` | 自定义 Jinja 对话模板文件。空 = 用 GGUF 元数据自带的模板。设置时自动加 `--jinja`（不带它只有内置模板名被接受）。**改此项需重启 llama.cpp** |
 | `strategy` | `single` | `single` 一次一个模型进程；`router` 常驻 `--models-dir` + `/models/load` 热切 |
 | `autoStart` | `true` | 门禁通过时自动拉起服务，否则等第一个请求。门禁见「启动门禁」节 |
 | `initialModel` | `""` | `autoStart` 时优先加载的模型；空 = 目录里排序最前的一份 |
